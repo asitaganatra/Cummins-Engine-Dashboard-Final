@@ -505,22 +505,22 @@ if uploaded_files:
                                         elif num_unique == 2: struct_type = "AltCANMessage"
                                         else: struct_type = "TimedFrame"
 
-                                        with st.expander(f"🔹 {can_id} — {struct_type} ({num_unique} unique frames)"):
-                                            all_arduino_lines = [hex_to_arduino_ref(v) for v in unique_hex]
+                                        all_arduino_lines = [hex_to_arduino_ref(v) for v in unique_hex]
 
-                                            if struct_type == "CANMessage":
-                                                code = f'{{ {can_id}, {all_arduino_lines[0]}, {int(avg_interval)}, 0, {total_occ if total_occ < 500 else -1} }}'
-                                                st.code(code, language="cpp")
-                                            elif struct_type == "AltCANMessage":
-                                                code = f'{{ {can_id},\n  /* dataA */ {all_arduino_lines[0]},\n  /* dataB */ {all_arduino_lines[1]},\n  false, {int(avg_interval)}, 0 }}'
-                                                st.code(code, language="cpp")
-                                            else:
-                                                lines = []
-                                                for j, frame in enumerate(all_arduino_lines):
-                                                    lines.append(f'  {{ {can_id}, {frame}, {int(avg_interval)}, false }},  // frame {j+1}')
-                                                code = '\n'.join(lines)
-                                                st.code(code, language="cpp")
-                                                st.caption(f"Total: {len(all_arduino_lines)} unique data frames for {can_id}")
+                                        st.markdown(f"**🔹 {can_id}** — `{struct_type}` ({num_unique} unique frames)")
+                                        if struct_type == "CANMessage":
+                                            code = f'{{ {can_id}, {all_arduino_lines[0]}, {int(avg_interval)}, 0, {total_occ if total_occ < 500 else -1} }}'
+                                            st.code(code, language="cpp")
+                                        elif struct_type == "AltCANMessage":
+                                            code = f'{{ {can_id},\n  /* dataA */ {all_arduino_lines[0]},\n  /* dataB */ {all_arduino_lines[1]},\n  false, {int(avg_interval)}, 0 }}'
+                                            st.code(code, language="cpp")
+                                        else:
+                                            lines = []
+                                            for j, frame in enumerate(all_arduino_lines):
+                                                lines.append(f'  {{ {can_id}, {frame}, {int(avg_interval)}, false }},  // frame {j+1}')
+                                            code = '\n'.join(lines)
+                                            st.code(code, language="cpp")
+                                            st.caption(f"Total: {len(all_arduino_lines)} unique data frames for {can_id}")
 
                                 st.divider()
 

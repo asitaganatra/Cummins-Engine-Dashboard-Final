@@ -75,6 +75,20 @@ def load_data(uploaded_file):
                     df['Frame'].astype(str).str.startswith('x|')
                 )
 
+            # --- Fill missing type, DLC, CAN-FD for short-format rows ---
+            # Short-format rows only have 7 fields; type/DLC/CAN-FD are NaN.
+            # We infer them from the hex data.
+            if 'type' in df.columns:
+                df.loc[df['type'].isna() & df['data'].notna(), 'type'] = 'data frame'
+            if 'DLC' in df.columns:
+                dlc_mask = df['DLC'].isna() & df['data'].notna()
+                if dlc_mask.any():
+                    df.loc[dlc_mask, 'DLC'] = df.loc[dlc_mask, 'data'].apply(
+                        lambda x: len(str(x).replace('x|', '').replace('|', '').strip().split())
+                    )
+            if 'CAN-FD' in df.columns:
+                df.loc[df['CAN-FD'].isna() & df['data'].notna(), 'CAN-FD'] = 'CAN'
+
             # --- Find and parse the time column ---
             time_col = None
             if 'system time' in df.columns:

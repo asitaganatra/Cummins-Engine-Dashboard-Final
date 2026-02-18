@@ -4,3 +4,4 @@ plotly
 numpy
 scikit-learn
 openpyxl
+xlsxwriter

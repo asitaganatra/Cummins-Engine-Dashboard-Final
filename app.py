@@ -699,18 +699,21 @@ if uploaded_files:
 
                                             combined_frames.append(uid_df)
 
-                                            # Write individual ID sheet
+                                            # Write individual ID sheet — drop internal helper columns
                                             clean_id = str(uid).replace('0x', '').replace(' ', '')[:20]
                                             id_sheet = clean_id[:31]
                                             existing = list(fw.sheets.keys()) if hasattr(fw, 'sheets') else []
                                             if id_sheet in existing:
                                                 id_sheet = f"{id_sheet[:22]}_{len(existing)}"
 
-                                            uid_df.to_excel(fw, index=False, sheet_name=id_sheet)
+                                            # Drop internal columns that can corrupt xlsx output
+                                            drop_cols = [c for c in ['Timestamp_dt', 'Timestamp_ms'] if c in uid_df.columns]
+                                            uid_export = uid_df.drop(columns=drop_cols)
+                                            uid_export.to_excel(fw, index=False, sheet_name=id_sheet)
                                             wb = fw.book
                                             ws = fw.sheets[id_sheet]
                                             txt_fmt = wb.add_format({'num_format': '@'})
-                                            for ci, cn in enumerate(uid_df.columns):
+                                            for ci, cn in enumerate(uid_export.columns):
                                                 if cn in ['ID', 'Frame', 'data', 'Timestamp', 'Data (Hex)']:
                                                     ws.set_column(ci, ci, 25, txt_fmt)
 
@@ -737,9 +740,12 @@ if uploaded_files:
                                                 "Row Count": len(combined_df)
                                             })
 
-                                            combined_df.to_excel(fw, index=False, sheet_name="All_IDs_Combined")
+                                            # Drop internal columns before writing
+                                            drop_cols_c = [c for c in ['Timestamp_dt', 'Timestamp_ms'] if c in combined_df.columns]
+                                            combined_export = combined_df.drop(columns=drop_cols_c)
+                                            combined_export.to_excel(fw, index=False, sheet_name="All_IDs_Combined")
                                             ws_c = fw.sheets["All_IDs_Combined"]
-                                            for ci, cn in enumerate(combined_df.columns):
+                                            for ci, cn in enumerate(combined_export.columns):
                                                 if cn in ['ID', 'Frame', 'data', 'Timestamp', 'Data (Hex)']:
                                                     ws_c.set_column(ci, ci, 25, txt_fmt)
 

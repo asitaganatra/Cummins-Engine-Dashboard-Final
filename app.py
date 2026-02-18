@@ -288,6 +288,8 @@ if uploaded_files:
                                         avg_interval = round(non_zero_intervals.mean(), 2) if len(non_zero_intervals) > 0 else 0
 
                                         unique_data_vals = id_df['data'].dropna().unique()
+                                        # Filter out empty/whitespace-only values that produce { } in Arduino format
+                                        unique_data_vals = [v for v in unique_data_vals if str(v).replace('x|', '').replace('|', '').strip()]
                                         num_unique = len(unique_data_vals)
 
                                         # --- Helper: convert hex string to Arduino format ---
@@ -355,6 +357,8 @@ if uploaded_files:
                                     for sid in report_df['ID'].unique():
                                         sid_data = report_df[report_df['ID'] == sid]
                                         u_hex = sid_data['Data (Hex)'].unique()
+                                        # Filter out empty/whitespace-only values
+                                        u_hex = [v for v in u_hex if str(v).replace('x|', '').replace('|', '').strip()]
                                         t_occ = sid_data['No. of Occurrence'].iloc[0]
                                         ivs = sid_data['Time_Interval (ms)']
                                         nz_iv = ivs[ivs > 0]

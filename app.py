@@ -62,6 +62,19 @@ def load_data(uploaded_file):
         if 'ID' in df.columns and 'Frame' in df.columns:
             df['ID'] = df['ID'].astype(str).str.replace('"', '').str.strip()
 
+            # --- Unify hex data into the 'data' column ---
+            # Some CSV formats (e.g. 500kbps logs) put hex data directly in 'Frame'
+            # (like 'x| FC FF FA FA FF FF FF FF') with 'data' column empty/NaN,
+            # while others put 'Extended Frame' in Frame and hex in 'data'.
+            if 'data' in df.columns:
+                mask = df['data'].isna() & df['Frame'].astype(str).str.startswith('x|')
+                df.loc[mask, 'data'] = df.loc[mask, 'Frame']
+            else:
+                # If there's no 'data' column at all, create one from Frame
+                df['data'] = df['Frame'].where(
+                    df['Frame'].astype(str).str.startswith('x|')
+                )
+
             # --- Find and parse the time column ---
             time_col = None
             if 'system time' in df.columns:
@@ -412,44 +425,6 @@ if uploaded_files:
 
                                         if view_mode == "📊 Detailed (All Occurrences)":
                                             st.dataframe(sdf, use_container_width=True)
-
-                                            # --- Expandable per-ID sections with ALL unique data frames ---
-                                            def hex_to_arduino_det(hex_str):
-                                                cleaned = str(hex_str).replace('x|', '').replace('|', '').strip()
-                                                bytes_list = cleaned.split()
-                                                return '{ ' + ', '.join(f'0x{b.upper()}' for b in bytes_list if len(b) == 2) + ' }'
-
-                                            st.markdown("#### 🔧 Full Arduino Data Reference (per ID)")
-                                            for can_id in sdf['ID'].unique():
-                                                id_data = sdf[sdf['ID'] == can_id]
-                                                unique_hex = id_data['Data (Hex)'].unique()
-                                                total_occ = id_data['No. of Occurrence'].iloc[0]
-                                                intervals = id_data['Time_Interval (ms)']
-                                                non_zero_intervals = intervals[intervals > 0]
-                                                avg_interval = round(non_zero_intervals.mean(), 2) if len(non_zero_intervals) > 0 else 0
-                                                num_unique = len(unique_hex)
-
-                                                if total_occ == 1: struct_type = "TimedFrame"
-                                                elif num_unique == 1: struct_type = "CANMessage"
-                                                elif num_unique == 2: struct_type = "AltCANMessage"
-                                                else: struct_type = "TimedFrame"
-
-                                                with st.expander(f"🔹 {can_id} — {struct_type} ({num_unique} unique frames)"):
-                                                    all_arduino_lines = [hex_to_arduino_det(v) for v in unique_hex]
-
-                                                    if struct_type == "CANMessage":
-                                                        code = f'{{ {can_id}, {all_arduino_lines[0]}, {int(avg_interval)}, 0, {total_occ if total_occ < 500 else -1} }}'
-                                                        st.code(code, language="cpp")
-                                                    elif struct_type == "AltCANMessage":
-                                                        code = f'{{ {can_id},\n  /* dataA */ {all_arduino_lines[0]},\n  /* dataB */ {all_arduino_lines[1]},\n  false, {int(avg_interval)}, 0 }}'
-                                                        st.code(code, language="cpp")
-                                                    else:
-                                                        lines = []
-                                                        for j, frame in enumerate(all_arduino_lines):
-                                                            lines.append(f'  {{ {can_id}, {frame}, {int(avg_interval)}, false }},  // frame {j+1}')
-                                                        code = '\n'.join(lines)
-                                                        st.code(code, language="cpp")
-                                                        st.caption(f"Total: {len(all_arduino_lines)} unique data frames for {can_id}")
                                         else:
                                             # Build summary: one row per ID with Arduino-ready comments
                                             def hex_to_arduino_fmt(hex_str):
@@ -458,8 +433,6 @@ if uploaded_files:
                                                 return '{ ' + ', '.join(f'0x{b.upper()}' for b in bytes_list if len(b) == 2) + ' }'
 
                                             summary_rows = []
-                                            id_full_data = {}  # Store full data for expanders below
-
                                             for can_id in sdf['ID'].unique():
                                                 id_data = sdf[sdf['ID'] == can_id]
                                                 unique_hex = id_data['Data (Hex)'].unique()
@@ -469,7 +442,6 @@ if uploaded_files:
                                                 avg_interval = round(non_zero_intervals.mean(), 2) if len(non_zero_intervals) > 0 else 0
                                                 num_unique = len(unique_hex)
 
-                                                # Determine controller struct type & build comment
                                                 if total_occ == 1:
                                                     struct_type = "TimedFrame"
                                                     brief = f"Single trigger (1 frame)"
@@ -482,7 +454,7 @@ if uploaded_files:
                                                     brief = f"Toggled dataA/dataB @ {avg_interval}ms"
                                                 else:
                                                     struct_type = "TimedFrame"
-                                                    brief = f"unique data ({num_unique} frames) — expand below ↓"
+                                                    brief = f"unique data ({num_unique} frames)"
 
                                                 summary_rows.append({
                                                     "ID": can_id,
@@ -494,40 +466,47 @@ if uploaded_files:
                                                     "Arduino Reference": brief
                                                 })
 
-                                                # Store all unique frames for the expander
-                                                id_full_data[can_id] = {
-                                                    "struct": struct_type,
-                                                    "unique_hex": unique_hex,
-                                                    "avg_interval": avg_interval,
-                                                    "total_occ": total_occ,
-                                                    "num_unique": num_unique
-                                                }
-
                                             summary_df = pd.DataFrame(summary_rows)
                                             st.dataframe(summary_df, use_container_width=True)
                                             st.caption(f"📌 {len(summary_df)} unique IDs → ready to translate into Arduino controller structs")
 
-                                            # --- Expandable per-ID sections with ALL data frames ---
-                                            st.markdown("#### 🔧 Full Arduino Data Reference (per ID)")
-                                            for can_id, info in id_full_data.items():
-                                                with st.expander(f"🔹 {can_id} — {info['struct']} ({info['num_unique']} unique frames)"):
-                                                    all_arduino_lines = [hex_to_arduino_fmt(v) for v in info['unique_hex']]
+                                    # --- Arduino Data Reference OUTSIDE the parent expander ---
+                                    def hex_to_arduino_ref(hex_str):
+                                        cleaned = str(hex_str).replace('x|', '').replace('|', '').strip()
+                                        bytes_list = cleaned.split()
+                                        return '{ ' + ', '.join(f'0x{b.upper()}' for b in bytes_list if len(b) == 2) + ' }'
 
-                                                    if info['struct'] == "CANMessage":
-                                                        code = f'{{ {can_id}, {all_arduino_lines[0]}, {int(info["avg_interval"])}, 0, {info["total_occ"] if info["total_occ"] < 500 else -1} }}'
-                                                        st.code(code, language="cpp")
+                                    st.markdown(f"#### 🔧 Full Arduino Data Reference (per ID) — {sname}")
+                                    for can_id in sdf['ID'].unique():
+                                        id_data = sdf[sdf['ID'] == can_id]
+                                        unique_hex = id_data['Data (Hex)'].unique()
+                                        total_occ = id_data['No. of Occurrence'].iloc[0]
+                                        intervals = id_data['Time_Interval (ms)']
+                                        non_zero_intervals = intervals[intervals > 0]
+                                        avg_interval = round(non_zero_intervals.mean(), 2) if len(non_zero_intervals) > 0 else 0
+                                        num_unique = len(unique_hex)
 
-                                                    elif info['struct'] == "AltCANMessage":
-                                                        code = f'{{ {can_id},\n  /* dataA */ {all_arduino_lines[0]},\n  /* dataB */ {all_arduino_lines[1]},\n  false, {int(info["avg_interval"])}, 0 }}'
-                                                        st.code(code, language="cpp")
+                                        if total_occ == 1: struct_type = "TimedFrame"
+                                        elif num_unique == 1: struct_type = "CANMessage"
+                                        elif num_unique == 2: struct_type = "AltCANMessage"
+                                        else: struct_type = "TimedFrame"
 
-                                                    else:  # TimedFrame or many unique frames
-                                                        lines = []
-                                                        for j, frame in enumerate(all_arduino_lines):
-                                                            lines.append(f'  {{ {can_id}, {frame}, {int(info["avg_interval"])}, false }},  // frame {j+1}')
-                                                        code = '\n'.join(lines)
-                                                        st.code(code, language="cpp")
-                                                        st.caption(f"Total: {len(all_arduino_lines)} unique data frames for {can_id}")
+                                        with st.expander(f"🔹 {can_id} — {struct_type} ({num_unique} unique frames)"):
+                                            all_arduino_lines = [hex_to_arduino_ref(v) for v in unique_hex]
+
+                                            if struct_type == "CANMessage":
+                                                code = f'{{ {can_id}, {all_arduino_lines[0]}, {int(avg_interval)}, 0, {total_occ if total_occ < 500 else -1} }}'
+                                                st.code(code, language="cpp")
+                                            elif struct_type == "AltCANMessage":
+                                                code = f'{{ {can_id},\n  /* dataA */ {all_arduino_lines[0]},\n  /* dataB */ {all_arduino_lines[1]},\n  false, {int(avg_interval)}, 0 }}'
+                                                st.code(code, language="cpp")
+                                            else:
+                                                lines = []
+                                                for j, frame in enumerate(all_arduino_lines):
+                                                    lines.append(f'  {{ {can_id}, {frame}, {int(avg_interval)}, false }},  // frame {j+1}')
+                                                code = '\n'.join(lines)
+                                                st.code(code, language="cpp")
+                                                st.caption(f"Total: {len(all_arduino_lines)} unique data frames for {can_id}")
 
                                 st.divider()
 

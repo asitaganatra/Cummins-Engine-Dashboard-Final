@@ -89,6 +89,10 @@ def load_data(uploaded_file):
             if 'CAN-FD' in df.columns:
                 df.loc[df['CAN-FD'].isna() & df['data'].notna(), 'CAN-FD'] = 'CAN'
 
+            # --- Handle conflict between 'system time' and hex 'time stamp' ---
+            if 'time stamp' in df.columns:
+                df.rename(columns={'time stamp': 'Hex_Timestamp'}, inplace=True)
+
             # --- Find and parse the time column ---
             time_col = None
             if 'system time' in df.columns:
@@ -98,6 +102,8 @@ def load_data(uploaded_file):
 
             if time_col:
                 raw_time = df[time_col].astype(str).str.replace('="', '').str.replace('"', '').str.strip()
+                # Update the original column with cleaned strings (removes =" prefix)
+                df[time_col] = raw_time
 
                 # Try parsing as datetime (handles 'HH:MM:SS.fff', 'YYYY-MM-DD HH:MM:SS', etc.)
                 parsed_dt = pd.to_datetime(raw_time, errors='coerce', format='mixed')

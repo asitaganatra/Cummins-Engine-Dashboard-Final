@@ -673,7 +673,7 @@ if uploaded_files:
                                             uid_df = uid_df.sort_values(by='Timestamp_ms')
 
                                             # Time interval per row
-                                            uid_df['Time_Interval (ms)'] = uid_df['Timestamp_ms'].diff()
+                                            uid_df['Time_Interval (ms)'] = uid_df['Timestamp_ms'].diff().fillna(0)
                                             nz = uid_df['Time_Interval (ms)'].dropna()
                                             nz = nz[nz > 0]
                                             uid_avg = round(nz.mean(), 2) if len(nz) > 0 else 0
